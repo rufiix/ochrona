@@ -1,0 +1,18 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SQLite database
+*.db
+
+# Docker
+.dockerignore
+
+# IDE settings
+.vscode/
+.idea/

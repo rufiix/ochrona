@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+python-jose[cryptography]
+pyotp
+pydantic[email]
+python-dotenv
+alembic
+# For cryptography, python-jose[cryptography] is often sufficient,
+# but we'll include it explicitly for clarity on its importance.
+cryptography

@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # Database Service (PostgreSQL)
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: astraea_db
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    networks:
+      - astraea-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # Backend API Service (FastAPI)
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: astraea_api
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    networks:
+      - astraea-net
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # Reverse Proxy Service (NGINX)
+  # ----------------------------------------------------------------------------
+  proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: astraea_proxy
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - astraea-net
+    restart: unless-stopped
+
+# ------------------------------------------------------------------------------
+# Volumes and Networks
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  astraea-net:
+    driver: bridge
