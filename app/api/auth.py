@@ -16,6 +16,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 # Dependency to get the current user from a JWT
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)) -> models.User:
+    """FastAPI dependency to get the current authenticated user from a JWT.
+
+    This function is used in protected endpoints. It decodes the JWT provided
+    in the Authorization header, validates it, and fetches the corresponding
+    user from the database.
+
+    Args:
+        token (str): The OAuth2 bearer token.
+        db (Session): The database session.
+
+    Raises:
+        HTTPException: If the token is invalid, expired, or the user is not found.
+
+    Returns:
+        models.User: The authenticated user object from the database.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -34,11 +50,22 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 @router.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
-    """
-    Handles user registration.
-    - Validates input using Pydantic schema.
-    - Checks if a user with the same username already exists.
-    - Hashes the password securely before storing.
+    """Creates a new user account.
+
+    This endpoint handles user registration. It validates the provided username
+    and password, checks for username uniqueness, hashes the password, and
+    stores the new user in the database.
+
+    Args:
+        user (schemas.UserCreate): The user registration data, containing
+                                   a username and password.
+        db (Session): The database session dependency.
+
+    Raises:
+        HTTPException: If the username is already registered.
+
+    Returns:
+        schemas.User: The newly created user's public information.
     """
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
@@ -63,11 +90,26 @@ from datetime import timedelta
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)
 ):
-    """
-    Handles the first step of user login.
-    - Authenticates with username/password.
-    - If 2FA is enabled, issues a temporary pre-auth token.
-    - If 2FA is not enabled, issues a final access token.
+    """Authenticates a user and initiates the login process.
+
+    This endpoint handles the first step of user login. It authenticates the
+    user with their username and password.
+
+    - If 2FA is **not** enabled for the user, it returns a final JWT access token.
+    - If 2FA is **enabled**, it returns a temporary pre-authentication token
+      that must be used with the `/login/verify-2fa` endpoint.
+
+    Args:
+        form_data (OAuth2PasswordRequestForm): The user's login credentials
+                                               (username and password).
+        db (Session): The database session dependency.
+
+    Raises:
+        HTTPException: If the username or password is incorrect.
+
+    Returns:
+        dict: A dictionary containing either a final `access_token` or a
+              `pre_auth_token` if 2FA is required.
     """
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
 
@@ -99,9 +141,26 @@ def verify_2fa_login(
     totp_code: str = Body(..., embed=True),
     db: Session = Depends(database.get_db),
 ):
-    """
-    Handles the second step of a 2FA login.
-    Verifies the pre-auth token and the TOTP code, then issues a final access token.
+    """Verifies the TOTP code to complete a two-factor authentication login.
+
+    This endpoint is the second step for users with 2FA enabled. It requires
+    the `pre_auth_token` obtained from the `/login` endpoint and a valid TOTP
+    code from the user's authenticator app. If both are valid, it issues a
+    final, standard JWT access token.
+
+    Args:
+        pre_auth_token (str): The temporary pre-authentication token from the
+                              initial login step. Passed as a Bearer token.
+        totp_code (str): The Time-based One-Time Password from the user's
+                         authenticator app.
+        db (Session): The database session dependency.
+
+    Raises:
+        HTTPException: If the pre-auth token is invalid, the user is not found,
+                       or the TOTP code is incorrect.
+
+    Returns:
+        schemas.Token: A standard JWT access token upon successful verification.
     """
     from jose import jwt, JWTError
     credentials_exception = HTTPException(
@@ -134,9 +193,26 @@ def verify_2fa_login(
 def setup_2fa(
     current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)
 ):
-    """
-    Sets up Two-Factor Authentication for the current user.
-    Generates and stores a new TOTP secret and returns a provisioning URI.
+    """Generates a new secret for setting up Two-Factor Authentication (2FA).
+
+    This endpoint is for authenticated users who wish to enable 2FA. It
+    generates a new TOTP secret, saves it to the user's record in the
+    database, and returns the secret along with a provisioning URI. The URI
+    can be converted into a QR code for easy scanning by authenticator apps.
+
+    This endpoint can only be used once per account. If 2FA is already
+    enabled, it will return an error.
+
+    Args:
+        current_user (models.User): The authenticated user, injected by dependency.
+        db (Session): The database session dependency.
+
+    Raises:
+        HTTPException: If 2FA is already enabled for the user's account.
+
+    Returns:
+        schemas.TwoFASetup: An object containing the new TOTP secret and the
+                            provisioning URI for QR code generation.
     """
     if current_user.two_fa_secret:
         raise HTTPException(

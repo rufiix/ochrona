@@ -23,5 +23,12 @@ app.include_router(messages.router)
 
 @app.get("/", tags=["Health Check"])
 def read_root():
-    """A simple health check endpoint."""
+    """Provides a simple health check endpoint for the API.
+
+    This endpoint can be used to verify that the service is running and
+    responsive. It does not require authentication.
+
+    Returns:
+        dict: A JSON response indicating the status and a welcome message.
+    """
     return {"status": "ok", "message": "Welcome to the Astraea API"}

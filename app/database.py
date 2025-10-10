@@ -23,6 +23,15 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Dependency to get a DB session for each request
 def get_db():
+    """FastAPI dependency to provide a database session per request.
+
+    This generator function creates a new SQLAlchemy `SessionLocal` for each incoming
+    request, yields it to the endpoint, and ensures that the session is closed
+    when the request is finished, even if an error occurs.
+
+    Yields:
+        sqlalchemy.orm.Session: The database session for the request.
+    """
     db = SessionLocal()
     try:
         yield db
