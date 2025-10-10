@@ -19,10 +19,26 @@ def send_message(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """
-    Handles sending a new encrypted message.
-    The server's role is to store the encrypted blobs and their relationships.
-    All encryption and signing happens on the client.
+    """Stores a new encrypted message sent from a user.
+
+    This endpoint receives a message that has been fully encrypted and signed on
+    the client side. The server's responsibility is to validate the recipients,
+    and then store the encrypted payload, signature, and the per-recipient
+    encrypted session keys in the database.
+
+    Args:
+        message_data (schemas.MessageSend): The payload containing the list of
+            recipients, the encrypted message content, the signature, and the
+            encrypted session keys for each recipient.
+        db (Session): The database session dependency.
+        current_user (models.User): The authenticated sender, injected by dependency.
+
+    Raises:
+        HTTPException: If any recipients are not found, or if there's a
+                       server error during the transaction.
+
+    Returns:
+        schemas.MessageMetadata: Metadata for the successfully sent message.
     """
     recipient_usernames = list(set(message_data.recipients)) # Deduplicate
     if not recipient_usernames:
@@ -85,8 +101,21 @@ def send_message(
 def get_inbox_messages(
     db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)
 ):
-    """
-    Retrieves a list of message metadata for the authenticated user's inbox.
+    """Retrieves metadata for all messages in the authenticated user's inbox.
+
+    This endpoint fetches a list of all messages where the current user is a
+    recipient. It returns a list of message metadata objects, which include
+    the sender's information, the creation timestamp, and the read status,
+    but not the encrypted content itself. The results are sorted by creation
+    date in descending order.
+
+    Args:
+        db (Session): The database session dependency.
+        current_user (models.User): The authenticated user, injected by dependency.
+
+    Returns:
+        List[schemas.MessageMetadata]: A list of message metadata objects
+                                       for the user's inbox.
     """
     recipient_entries = (
         db.query(models.MessageRecipient)
@@ -114,9 +143,24 @@ def get_message_by_id(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """
-    Retrieves the full, encrypted content of a specific message.
-    The user must be a recipient of the message.
+    """Retrieves the full, encrypted content of a specific message.
+
+    This endpoint fetches all the necessary components for a client to decrypt
+    and verify a message: the encrypted payload, the sender's signature, and
+    the session key (which itself is encrypted with the recipient's public key).
+
+    The user must be a valid recipient of the message to access it.
+
+    Args:
+        message_id (uuid.UUID): The unique identifier of the message to retrieve.
+        db (Session): The database session dependency.
+        current_user (models.User): The authenticated user, injected by dependency.
+
+    Raises:
+        HTTPException: If the message is not found or the user is not a recipient.
+
+    Returns:
+        schemas.MessageFull: An object containing the full encrypted message details.
     """
     recipient_entry = (
         db.query(models.MessageRecipient)
@@ -150,7 +194,23 @@ def mark_message_as_read(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Marks a message as read for the current user."""
+    """Marks a specific message as read for the authenticated user.
+
+    This endpoint updates the `read_status` of a message recipient entry
+    from False to True. It is idempotent; calling it on an already-read
+    message will have no effect and will still return a success status.
+
+    Args:
+        message_id (uuid.UUID): The identifier of the message to mark as read.
+        db (Session): The database session dependency.
+        current_user (models.User): The authenticated user, injected by dependency.
+
+    Raises:
+        HTTPException: If the message is not found in the user's inbox.
+
+    Returns:
+        None: An empty response with a 204 No Content status code.
+    """
     recipient_entry = db.query(models.MessageRecipient).filter(
         models.MessageRecipient.message_id == message_id,
         models.MessageRecipient.recipient_id == current_user.id
@@ -172,9 +232,21 @@ def delete_message(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """
-    Deletes a message from the user's inbox by deleting their recipient record.
-    This does not delete the message for other recipients.
+    """Deletes a message from the authenticated user's inbox.
+
+    This action only removes the message recipient entry for the current user.
+    It does not delete the message itself or affect any other recipients of
+    the same message. This operation is idempotent and will return a success
+    status even if the message does not exist in the user's inbox, to prevent
+    information leakage.
+
+    Args:
+        message_id (uuid.UUID): The identifier of the message to delete.
+        db (Session): The database session dependency.
+        current_user (models.User): The authenticated user, injected by dependency.
+
+    Returns:
+        None: An empty response with a 204 No Content status code.
     """
     recipient_entry = db.query(models.MessageRecipient).filter(
         models.MessageRecipient.message_id == message_id,

@@ -4,7 +4,23 @@ from starlette.responses import Response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Adds critical security headers to all HTTP responses.
+
+    This middleware applies a set of security-related HTTP headers to every
+    outgoing response, helping to protect the application against common web
+    vulnerabilities like clickjacking, cross-site scripting (XSS), and
+    protocol downgrade attacks.
+    """
     async def dispatch(self, request: Request, call_next):
+        """Processes a request and adds security headers to the response.
+
+        Args:
+            request (Request): The incoming HTTP request.
+            call_next (callable): The next middleware or endpoint in the chain.
+
+        Returns:
+            Response: The HTTP response with added security headers.
+        """
         response: Response = await call_next(request)
 
         # Strict-Transport-Security (HSTS)
