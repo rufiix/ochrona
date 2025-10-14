@@ -22,8 +22,10 @@ class TokenData(BaseModel):
 
     Attributes:
         user_id (str | None): The user's unique identifier (subject of the token).
+        scope (str | None): The scope of the token (e.g., 'access_token', '2fa').
     """
     user_id: str | None = None
+    scope: str | None = None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -55,9 +57,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """Creates a new JWT access token.
 
     The token will contain the provided data and an expiration timestamp.
+    The 'scope' must be present in the data dictionary.
 
     Args:
-        data (dict): The data to encode in the token (e.g., user identifier).
+        data (dict): The data to encode in the token. Must include 'sub'
+                     (user identifier) and 'scope'.
         expires_delta (Optional[timedelta]): The lifespan of the token. If not
             provided, a default expiration time is used.
 
@@ -65,6 +69,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         str: The encoded JWT access token.
     """
     to_encode = data.copy()
+    if "scope" not in to_encode:
+        raise ValueError("Token data must include a 'scope' claim.")
+
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -75,23 +82,33 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> Optional[TokenData]:
-    """Decodes a JWT access token and validates its signature and expiration.
+def decode_access_token(token: str, expected_scope: Optional[str] = None) -> Optional[TokenData]:
+    """Decodes a JWT, validates its scope, signature, and expiration.
 
     Args:
         token (str): The JWT access token to decode.
+        expected_scope (Optional[str]): The required scope for the token.
+            If provided, the function will verify that the token's 'scope'
+            claim matches this value.
 
     Returns:
-        Optional[TokenData]: A Pydantic model containing the token payload
-                             (specifically the user_id) if the token is valid,
+        Optional[TokenData]: A Pydantic model with token payload (user_id, scope)
+                             if the token is valid and has the correct scope,
                              otherwise None.
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
+        scope = payload.get("scope")
+
         if user_id is None:
             return None
-        return TokenData(user_id=user_id)
+
+        # If an expected scope is provided, it must match the token's scope.
+        if expected_scope and scope != expected_scope:
+            return None
+
+        return TokenData(user_id=user_id, scope=scope)
     except JWTError:
         return None
 

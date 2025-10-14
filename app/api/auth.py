@@ -37,7 +37,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    token_data = auth_service.decode_access_token(token)
+    token_data = auth_service.decode_access_token(token, expected_scope="access_token")
     if token_data is None or token_data.user_id is None:
         raise credentials_exception
 
@@ -131,7 +131,9 @@ def login_for_access_token(
         return {"pre_auth_token": pre_auth_token, "token_type": "bearer", "2fa_required": True}
 
     # If 2FA is not enabled, issue a standard access token.
-    access_token = auth_service.create_access_token(data={"sub": str(user.id)})
+    access_token = auth_service.create_access_token(
+        data={"sub": str(user.id), "scope": "access_token"}
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -185,7 +187,9 @@ def verify_2fa_login(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid 2FA code")
 
     # Success: issue the final access token
-    access_token = auth_service.create_access_token(data={"sub": str(user.id)})
+    access_token = auth_service.create_access_token(
+        data={"sub": str(user.id), "scope": "access_token"}
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 
