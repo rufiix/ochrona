@@ -1,18 +1,16 @@
-# Environment variables
-.env
-
-# Python cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# SQLite database
-*.db
-
-# Docker
-.dockerignore
-
-# IDE settings
+*.py[cod]
+*$py.class
+.env
+.venv
+venv/
+ENV/
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
 .vscode/
 .idea/
